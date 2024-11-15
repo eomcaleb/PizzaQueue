@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pizza Conveyor Belt Animation</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f8ecd4;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        #canvas {
+            width: 100%;
+            max-width: 800px;
+            display: block;
+            border: 1px solid #333;
+            background-color: #ffeaa7;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        button {
+            margin-top: 10px;
+            padding: 15px 25px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #d63031;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #e74c3c;
+        }
+        /* Adjust button size for smaller screens */
+        @media (max-width: 600px) {
+            button {
+                font-size: 16px;
+                padding: 12px 20px;
+            }
+        }
+        /* Style for the tally display */
+        #tally {
+            margin-top: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #2d3436;
+        }
+    </style>
+    <!-- Viewport meta tag for mobile scaling -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <!-- Tally display -->
+    <div id="tally">
+        Current Pizzas: 0 | Max Pizzas: 0
+    </div>
+    <canvas id="canvas"></canvas>
+    <button id="addPizzaButton">Add Pizza</button>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const addPizzaButton = document.getElementById('addPizzaButton');
+        const tallyDisplay = document.getElementById('tally');
+
+        // Virtual canvas size for consistent drawing coordinates
+        const virtualWidth = 800;
+        const virtualHeight = 300;
+
+        // Initial positions and constants (based on virtual canvas size)
+        let conveyorStartX = 120;
+        let conveyorEndX = 700;
+        let conveyorY = 170;
+        let groundY = 250;
+        const gravity = 0.5;
+        const conveyorSpeed = 2;
+
+        let pizzaQueue = [];
+        let poopPile = [];
+        let isEating = false;
+        let maxPizzaCount = 0; // Variable to track maximum pizzas in queue
+
+        function resizeCanvas() {
+            const canvasWidth = canvas.clientWidth;
+            const aspectRatio = virtualWidth / virtualHeight;
+            const canvasHeight = canvasWidth / aspectRatio;
+            canvas.style.height = canvasHeight + 'px';
+
+            const devicePixelRatio = window.devicePixelRatio || 1;
+            canvas.width = canvasWidth * devicePixelRatio;
+            canvas.height = canvasHeight * devicePixelRatio;
+
+            // Adjust the context for the device pixel ratio
+            ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // Initial canvas setup
+
+        function drawStickFigure(x, y, isEating) {
+            ctx.beginPath();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+
+            // Head
+            ctx.arc(x, y, 10, 0, Math.PI * 2);
+
+            // Body
+            ctx.moveTo(x, y + 10);
+            ctx.lineTo(x, y + 40);
+
+            // Arms
+            ctx.moveTo(x, y + 20);
+            if (isEating) {
+                ctx.lineTo(x - 15, y + 10); // Eating position
+            } else {
+                ctx.lineTo(x - 15, y + 30);
+            }
+            ctx.moveTo(x, y + 20);
+            ctx.lineTo(x + 15, y + 30);
+
+            // Legs
+            ctx.moveTo(x, y + 40);
+            ctx.lineTo(x - 10, y + 60);
+            ctx.moveTo(x, y + 40);
+            ctx.lineTo(x + 10, y + 60);
+
+            ctx.stroke();
+
+            // Eyes and expressions
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(x - 3, y - 2, 2, 0, Math.PI * 2);
+            ctx.arc(x + 3, y - 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            if (isEating) {
+                ctx.arc(x, y + 5, 4, 0, Math.PI, false); // Eating mouth
+            } else {
+                ctx.moveTo(x - 3, y + 5);
+                ctx.lineTo(x + 3, y + 5); // Neutral mouth
+            }
+            ctx.stroke();
+        }
+
+        function drawPizza(x, y) {
+            ctx.beginPath();
+            ctx.moveTo(x, y - 10);
+            ctx.lineTo(x + 10, y + 5);
+            ctx.lineTo(x - 10, y + 5);
+            ctx.closePath();
+            ctx.fillStyle = 'orange';
+            ctx.fill();
+
+            // Toppings
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(x - 5, y - 5, 2, 0, Math.PI * 2);
+            ctx.arc(x + 5, y, 2, 0, Math.PI * 2);
+            ctx.arc(x, y + 5, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'brown';
+            ctx.stroke();
+        }
+
+        function drawPoop(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.arc(x - 10, y + 5, 6, 0, Math.PI * 2);
+            ctx.arc(x + 10, y + 5, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#8B4513';
+            ctx.fill();
+            ctx.strokeStyle = '#5D3A1A';
+            ctx.stroke();
+        }
+
+        function drawConveyorBelt() {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(conveyorStartX - 20, conveyorY - 20, conveyorEndX - conveyorStartX + 40, 40);
+
+            // Conveyor belt details
+            ctx.strokeStyle = '#666';
+            const beltSegments = Math.floor((conveyorEndX - conveyorStartX) / 20);
+            for (let i = 0; i <= beltSegments; i++) {
+                ctx.beginPath();
+                ctx.moveTo(conveyorStartX + i * 20, conveyorY - 20);
+                ctx.lineTo(conveyorStartX + i * 20, conveyorY + 20);
+                ctx.stroke();
+            }
+        }
+
+        function drawPizzaQueue() {
+            for (let i = 0; i < pizzaQueue.length; i++) {
+                const pizza = pizzaQueue[i];
+                if (!pizza.isFalling) {
+                    // Move pizza along conveyor belt
+                    pizza.x += conveyorSpeed;
+
+                    if (pizza.x >= conveyorEndX) {
+                        pizza.isFalling = true;
+                        pizza.vy = 0; // Start falling
+                    }
+                } else {
+                    // Pizza is falling
+                    pizza.vy += gravity;
+                    pizza.y += pizza.vy;
+
+                    if (pizza.y >= groundY) {
+                        // Pizza has reached the ground, transform into poop
+                        poopPile.push({ x: pizza.x, y: groundY });
+                        pizzaQueue.splice(i, 1);
+                        i--;
+                        continue;
+                    }
+                }
+                drawPizza(pizza.x, pizza.y);
+            }
+        }
+
+        function drawPoopPile() {
+            for (let i = 0; i < poopPile.length; i++) {
+                const poop = poopPile[i];
+                drawPoop(poop.x, poop.y);
+            }
+        }
+
+        function updateTally() {
+            // Update maximum pizza count if current is higher
+            if (pizzaQueue.length > maxPizzaCount) {
+                maxPizzaCount = pizzaQueue.length;
+            }
+
+            // Update the tally display
+            tallyDisplay.textContent = `Current Pizzas: ${pizzaQueue.length} | Max Pizzas: ${maxPizzaCount}`;
+        }
+
+        function addPizzaToQueue() {
+            isEating = true;
+            setTimeout(() => {
+                isEating = false;
+                // Add a new pizza at the start of the conveyor belt
+                pizzaQueue.push({
+                    x: conveyorStartX,
+                    y: conveyorY,
+                    vy: 0,
+                    isFalling: false,
+                });
+                updateTally(); // Update tally after adding a pizza
+            }, 500);
+        }
+
+        function draw() {
+            ctx.save(); // Save the current state
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transformations
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Scale the context to virtual canvas size
+            const scaleX = canvas.width / virtualWidth;
+            const scaleY = canvas.height / virtualHeight;
+            ctx.scale(scaleX, scaleY);
+
+            // Update positions based on virtual canvas size
+            conveyorStartX = 120;
+            conveyorEndX = 700;
+            conveyorY = 170;
+            groundY = 250;
+
+            // Draw elements
+            drawConveyorBelt();
+            drawPizzaQueue();
+            drawPoopPile();
+            drawStickFigure(50, 120, isEating);
+
+            ctx.restore(); // Restore original state
+
+            updateTally(); // Update tally in each frame
+        }
+
+        setInterval(draw, 1000 / 60); // 60fps animation
+        addPizzaButton.addEventListener('click', addPizzaToQueue);
+
+        draw(); // Initial drawing
+    </script>
+</body>
+</html>
